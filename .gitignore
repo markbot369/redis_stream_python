@@ -1,0 +1,26 @@
+# .gitignore for a Python project managed with Poetry
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+*.egg-info/
+dist/
+build/
+*.egg-info
+.eggs/
+*.egg
+*.egg-info
+*.so
+*.dylib
+
+# Poetry
+__pypackages__/
+.poetry/
+
+# Ignore Visual Studio Code settings
+.vscode/
+
+# Ignore Visual Studio Code workspace files
+*.code-workspace
