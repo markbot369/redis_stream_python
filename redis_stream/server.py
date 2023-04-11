@@ -3,6 +3,16 @@ import asyncio
 from redis_stream.service import RedisService
 
 
+redis_config = {
+    'host': 'localhost', 
+    'port': 6379, 
+    'db': 0,
+    'stream_name': 'mystream', 
+    'group_name': 'group1', 
+    'consumer_name': 'consumer1'
+}
+
+
 def parse_arguments():
     parser = argparse.ArgumentParser()
     parser.add_argument('--stream', default='mystream',

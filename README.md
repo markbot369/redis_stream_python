@@ -70,6 +70,37 @@ async def start(self):
     await self.read_from_stream()
 ```
 
+## Create some tests to see how this Redis service works
+
+For init the test we are using the PyTest library. Import the `pytest` module asyncio and the RedisService class.
+
+```python
+import pytest
+import asyncio
+from redis_stream_server.redis_service import RedisService
+```
+
+In this example, the redis_service fixture creates an instance of the RedisService class and connects to a Redis server. The fixture also flushes the Redis database and closes the connection after each test.
+
+```python
+async def redis_service():
+    service = RedisService(stream_name='test_stream', queue_name='test_queue')
+    await service.connect_to_redis()
+    yield service
+    await service._redis_db.flushdb()
+    await service._redis_db.close()
+```
+
+The `test_write_to_queue` function tests the `write_to_queue` method by pushing a message to the Redis queue and checking that the message is in the queue.
+
+The `test_read_from_stream` function tests the `read_from_stream` method by adding a message to the Redis stream, waiting for a short time for the message to be processed, and checking that the message was received by the method using the capsys fixture to capture the printed output.
+
+You can run these tests using the pytest command in your terminal.
+
+```bash
+pytest -v tests/test_redis_service.py
+```
+
 ## Redis Stream Server
 
 To make this code into a CLI application, we use the argparse module to parse command-line arguments. The parse_arguments function defines two optional arguments, `--stream` and `--queue`, with default values of mystream and myqueue, respectively. The main function calls parse_arguments to retrieve the command-line arguments, and then creates an instance of the RedisService class with these arguments.
