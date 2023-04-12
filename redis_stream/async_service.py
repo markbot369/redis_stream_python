@@ -79,29 +79,3 @@ class AsyncRedisStreamConsumer:
             self._redis.close()
             # await self._redis_db.wait_closed()
         log.info('Closed Redis connection')
-
-
-# if __name__ == '__main__':
-#     stream_name = 'mystream'
-#     group_name = 'group1'
-#     consumer_name = 'consumer1'
-#     last_delivered_id = '>'  # start reading from the latest message
-#     count = 1
-#     redis_config = {'host': 'localhost', 'port': 6379, 'db': 0}
-
-#     stream_consumer = AsyncRedisStreamConsumer(
-#         stream_name,
-#         group_name,
-#         consumer_name,
-#         last_delivered_id,
-#         count,
-#         redis_config)
-
-#     async def run_consumer():
-#         print(f"Consumer started for stream name: {stream_name}, Group name: {group_name}, Consumer name: {consumer_name} ")
-#         await stream_consumer.start()
-
-#     try:
-#         asyncio.run(run_consumer())
-#     except KeyboardInterrupt:
-#         asyncio.run(stream_consumer.stop())

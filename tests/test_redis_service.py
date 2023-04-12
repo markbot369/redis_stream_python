@@ -1,29 +1,46 @@
-import pytest
-import asyncio
-from redis_stream.service import RedisService
+import redis
+from redis_stream.service import RedisStreamReader
 
 
-@pytest.fixture
-async def redis_service():
-    service = RedisService(stream_name='test_stream', queue_name='test_queue')
-    await service.connect_to_redis()
-    yield service
-    await service._redis_db.flushdb()
-    await service._redis_db.close()
+test_data = {
+    'stream_key': 'mystream',
+    'group_name': 'group1',
+    'consumer_name': 'consumer1'
+}
 
 
-# @pytest.mark.asyncio
-# async def test_write_to_queue(redis_service):
-#     message = 'test message'
-#     await redis_service.write_to_queue(message)
-#     result = await redis_service._redis_db.lrange(redis_service._queue_name, 0, -1)
-#     assert result == [message.encode()]
+def test_redis_stream_connected():
+    expected = True
+    redis_stream_reader = RedisStreamReader(
+        test_data['stream_key'],
+        test_data['group_name'],
+        test_data['consumer_name'])
+    assert redis_stream_reader.is_connected() == expected
 
 
-@pytest.mark.asyncio
-async def test_read_from_stream(redis_service, capsys):
-    message = {'test_stream': [(b'1-0', {b'message': b'test message'})]}
-    await redis_service._redis_db.xadd('test_stream', message)
-    await asyncio.sleep(0.1)
-    captured = capsys.readouterr()
-    assert 'Received message from stream' in captured.out
+def test_redis_stream_reader():
+    # Instantiate a Redis stream reader
+    stream_key = test_data['stream_key']
+    group_name = test_data['group_name']
+    consumer_name = test_data['consumer_name']
+    redis_stream_reader = RedisStreamReader(
+        stream_key, group_name, consumer_name
+    )
+
+    # Create a test message
+    message_data = {'foo': 'bar'}
+
+    # Add the message to the Redis stream
+    redis_client = redis.Redis()
+    redis_client.xadd(stream_key, message_data)
+
+    # Read the message from the Redis stream
+    messages = list(redis_stream_reader.read())
+    assert len(messages) == 1
+    message = messages[0]
+
+    # Check that the message data matches
+    assert message[b'foo'] == b'bar'
+
+    # Acknowledge the message
+    redis_stream_reader.ack(message['message_id'])
