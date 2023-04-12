@@ -2,7 +2,7 @@ import redis
 
 
 class RedisStreamReader:
-    def __init__(self, stream_key, group_name, consumer_name, 
+    def __init__(self, stream_key, group_name, consumer_name,
                  server='localhost', port=6379):
         self.redis_client = redis.Redis.from_url(f"redis://{server}:{port}")
         self.stream_key = stream_key

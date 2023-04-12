@@ -19,87 +19,195 @@ In this code, we define a Python class called RedisService that encapsulates the
 The following code shows the init method of the RedisService class:
 
 ```python
-from redis import asyncio as aioredis
+import redis
 
 
-class RedisService:
-    """Base Redis service class that's connects to a Redis stream server."""
-    def __init__(self, stream_name, queue_name,
-                 server: str = 'localhost',
-                 port: int = 6379):
-        self._stream_name = stream_name
-        self._queue_name = queue_name
-        self._localhost = server
-        self._port = port
-        self._redis_db = None
-```
+class RedisClient:
+    def __init__(self, host, port, password, stream_key):
+        self.host = host
+        self.port = port
+        self.password = password
+        self.stream_key = stream_key
+        self.redis_client = redis.Redis(host=self.host, port=self.port, password=self.password)
 
-To connect to Redis, the `connect_to_redis` method uses the aioredis module to create a Redis connection pool. This method is called when the start method is called, which starts the service by connecting to Redis and starting to read from the stream.
+    def publish_message(self, message):
+        self.redis_client.xadd(self.stream_key, message)
 
-```python
-async def connect_to_redis(self):
-    self._redis_db = await aioredis.create_redis_pool(
-        f'redis://{self._localhost}:{self._port}'
-    )
-```
-
-The `read_from_stream` method is an asynchronous loop that reads from the Redis stream indefinitely. When a new message is received, it is printed to the console, and then written to the Redis queue using the `write_to_queue` method. This method uses the `lpush` command to push a message onto the head of the queue.
-
-```python
-async def write_to_queue(self, message):
-    await self._redis_db.lpush(self._queue_name, message)
-
-
-async def read_from_stream(self):
-    while True:
-        message = await self._redis_db.xread(
-            [self._stream_name],
-            latest_ids=['>'],
-            count=1,
-            timeout=0
+    def consume_messages(self, consumer_group, consumer_name,
+                         last_id='>', count=1):
+        messages = self.redis_client.xreadgroup(
+            groupname=consumer_group,
+            consumername=consumer_name,
+            streams={self.stream_key: last_id},
+            count=count,
+            block=0
         )
-        print(f'Received message from stream: {message}')
-        await self.write_to_queue(message)
+        return messages
+
 ```
 
-Finally we define a start method that starts the service by connecting to Redis and starting to read from the stream.
+This Redis client class takes in the Redis host, port, and the stream key to connect to. The `publish_message` method takes a message as an argument and publishes it to the Redis stream. The `consume_messages` method takes the name of the consumer group, the name of the consumer, the last ID of the message read (default is the last message), and the count of messages to be consumed (default is 1).
+
+Here's an example of how to use the Redis client to publish and consume messages:
 
 ```python
-async def start(self):
-    await self.connect_to_redis()
-    await self.read_from_stream()
+from redis_stream_server.redis_service import RedisService
+
+redis_client = RedisClient('localhost', 6379, None, 'mystream')
+# Publish a message to the stream
+redis_client.publish_message({'name': 'Alice', 'age': 30})
+# Consume messages from the stream
+consumer_group = 'myconsumer'
+consumer_name = 'consumer1'
+last_id = '0'
+count = 1
+
+messages = redis_client.consume_messages(consumer_group, consumer_name, last_id, count)
+print(messages)
 ```
 
 ## Create some tests to see how this Redis service works
 
-For init the test we are using the PyTest library. Import the `pytest` module asyncio and the RedisService class.
+These tests cover the basic functionality of the Redis client, ensuring that messages can be published to the stream and consumed by a consumer group.
+For init the test we are using the PyTest library. Import the `pytest` module and the `RedisClient` class.
 
 ```python
 import pytest
-import asyncio
-from redis_stream_server.redis_service import RedisService
+from redis_stream.simple_redisclient import RedisClient
 ```
 
-In this example, the redis_service fixture creates an instance of the RedisService class and connects to a Redis server. The fixture also flushes the Redis database and closes the connection after each test.
+In this example, the `redis_client` fixture creates an instance of the RedisClient class and connects to a Redis server. The fixture also flushes the Redis database and closes the connection after each test.
 
 ```python
-async def redis_service():
-    service = RedisService(stream_name='test_stream', queue_name='test_queue')
-    await service.connect_to_redis()
-    yield service
-    await service._redis_db.flushdb()
-    await service._redis_db.close()
+@pytest.fixture
+def redis_client():
+    return RedisClient('localhost', 6379, None, stream_name)
+
 ```
 
-The `test_write_to_queue` function tests the `write_to_queue` method by pushing a message to the Redis queue and checking that the message is in the queue.
+Then we can test the `publish_message` method and the `consume_messages` method with the following code:
 
-The `test_read_from_stream` function tests the `read_from_stream` method by adding a message to the Redis stream, waiting for a short time for the message to be processed, and checking that the message was received by the method using the capsys fixture to capture the printed output.
+```python
+def test_publish_message(redis_client):
+    # Clear all the data in the  test stream
+    # Use XTRIM to remove all messages from the stream
+    redis_client.redis_client.xtrim(stream_name, maxlen=0)
 
-You can run these tests using the pytest command in your terminal.
+    message = {'name': 'Bob', 'age': '25'}
+    redis_client.publish_message(message)
+    result = redis_client.redis_client.xread({redis_client.stream_key: 0}, count=1)
+    res_msg = {key.decode('utf-8'): value.decode('utf-8')
+               for key, value in result[0][1][0][1].items()}
+    assert res_msg == message
+
+
+def test_consume_messages(redis_client):
+    consumer_group = 'group1'
+    consumer_name = 'consumer1'
+    last_id = '>'
+    count = 3
+
+    redis_client.redis_client.xtrim(stream_name, maxlen=0)
+    # publish some messages to the stream
+    messages = [
+        {'name': 'Charlie', 'age': '35'},
+        {'name': 'David', 'age': '40'},
+        {'name': 'Eve', 'age': '45'}
+    ]
+    for message in messages:
+        redis_client.publish_message(message)
+
+    # consume messages from the stream
+    result = redis_client.consume_messages(
+        consumer_group,
+        consumer_name,
+        last_id=last_id,
+        count=count)
+      
+    res_message = {key.decode('utf-8'): value.decode('utf-8')
+                    for key, value in result[0][1][0][1].items()}
+    assert len(result) == 1
+    assert len(result[0][1]) == count
+    assert res_message == messages[0]
+
+```
+
+The test then is invocated with the calling the PyTest command bellow:
 
 ```bash
-pytest -v tests/test_redis_service.py
+pytest -v tests/test_simple_client.py
 ```
+
+To create a service that continuously listens for new messages on a Redis stream, you can use the Redis xreadgroup command with the block option set to a non-zero value. This will block the client until new messages are available on the stream. Here's an example of a Python script that implements this:
+
+```python
+import redis
+
+class RedisStreamListener:
+    def __init__(self, host, port, stream_key, consumer_group, consumer_name):
+        self.host = host
+        self.port = port
+        self.password = password
+        self.stream_key = stream_key
+        self.consumer_group = consumer_group
+        self.consumer_name = consumer_name
+        self.redis_client = redis.Redis(host=self.host, port=self.port)
+
+        # Create the consumer group if it doesn't exist
+        self.redis_client.xgroup_create(self.stream_key, self.consumer_group, id='0', mkstream=True)
+
+    def listen(self):
+        while True:
+            messages = self.redis_client.xreadgroup(
+                group_name=self.consumer_group,
+                consumer_name=self.consumer_name,
+                streams={self.stream_key: '>'},
+                count=1,
+                block=0
+            )
+            if messages:
+                for message in messages[0][1]:
+                    # Process the message here
+                    print(f"Received message: {message[1]}")
+                    self.redis_client.xack(self.stream_key, self.consumer_group, message[0])
+
+```
+
+When using the XREADGROUP command to read messages from a stream and process them in a distributed fashion across multiple consumers the XACK command is used to acknowledge that a consumer has processed one or more messages from a stream.
+
+After a consumer has processed a message, it should call the XACK command to tell Redis that the message has been processed and can be removed from the stream. If the XACK command is not called, the message will remain in the stream and may be delivered to another consumer.
+
+We can add a method for our client to acknowled the message by calling the XACK command. The method takes the message ID and the consumer group name. The method returns `True` if the message was acknowledged, `False` if the message was not acknowledged, and `None` if the message was not acknowledged.
+
+Here is the code for such method:
+
+```python
+def ack(self, message_id):
+        self.redis_client.xack(self.stream_key, self.group_name, message_id)
+
+```
+
+## Creating a Redis stream consumer service for using in a microservice environment
+
+In a microservice environment we need to provide a service that can consume messages(events) from a Redis stream and can react to this event and run some function asociated with such event.
+
+ It’s possible to have multiple consumer groups as well as regular consumers that are not part of any group, all consuming messages at the  same time. 
+
+ In the following figure, there are two different consumer groups (“Customer Care Application” and “Payment Application”) as well as a regular consumer 
+(like an admin "Dashboard Service") that are all consuming the messages.
+
+--------------------------------
+TODO: Insert the figure here
+--------------------------------
+
+Thats the base principle of using Redis Streams for a microservice environment. All the consumer groups and regular consumers are consuming the messages(events) that are important for their inner context functionality.
+
+
+
+
+## Redis Stream Service
+
+In this section we will create a Redis Stream service that can consume messages from a Redis stream. The service will consume messages from the Redis stream in an asynchronous manner.
 
 ## Redis Stream Server
 
