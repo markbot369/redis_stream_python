@@ -7,7 +7,9 @@ class RedisClient:
         self.port = port
         self.password = password
         self.stream_key = stream_key
-        self.redis_client = redis.Redis(host=self.host, port=self.port, password=self.password)
+        self.redis_client = redis.Redis(host=self.host,
+                                        port=self.port,
+                                        password=self.password)
 
     def is_connected(self):
         return self.redis_client.ping()
@@ -30,4 +32,7 @@ class RedisClient:
         self.redis_client.xack(self.stream_key, self.group_name, message_id)
 
     def nack(self, message_id):
-        self.redis_client.xack(self.stream_key, self.group_name, message_id, False)
+        self.redis_client.xack(self.stream_key,
+                               self.group_name,
+                               message_id,
+                               False)

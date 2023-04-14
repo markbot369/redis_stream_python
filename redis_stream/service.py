@@ -1,30 +1,37 @@
-import redis
+"""Creates a basic Python callable as a microservice for running inside the 
+Redis stream consumer.
+"""
+from typing import Any
 
 
-class RedisStreamReader:
-    def __init__(self, stream_key, group_name, consumer_name,
-                 server='localhost', port=6379):
-        self.redis_client = redis.Redis.from_url(f"redis://{server}:{port}")
-        self.stream_key = stream_key
-        self.group_name = group_name
-        self.consumer_name = consumer_name
-        # self.redis_client.xgroup_create(self.stream_key, self.group_name, mkstream=True)
-        self.consumer = self.redis_client.xreadgroup(
-            self.group_name,
-            self.consumer_name,
-            {self.stream_key: ">"})
+class BaseService:
+    """
+    Creates a basic Python callable for running inside the 
+    Redis consumer service.
+    """
+    async def __call__(self, *args: Any, **kwds: Any) -> Any:
+        """Call the object as a function, 
+        passing *args and **kwds to self.execute().
 
-    def is_connected(self):
-        return self.redis_client.ping()
+        Args:
+            *args: Positional arguments to pass to self.execute().
+            **kwds: Keyword arguments to pass to self.execute().
 
-    def read(self):
-        while True:
-            messages = self.consumer[0][1]
-            if messages:
-                yield from messages
+        Returns:
+            The result of calling self.execute(*args, **kwds).
+        """
+        await self.execute(*args, **kwds)
 
-    def ack(self, message_id):
-        self.redis_client.xack(self.stream_key, self.group_name, message_id)
+    async def execute(self, *args: Any, **kwds: Any) -> Any:
+        """
+        Executes the function with the given arguments and keyword arguments.
 
-    def nack(self, message_id):
-        self.redis_client.xack(self.stream_key, self.group_name, message_id, False)
+        Args:
+            *args: Positional arguments to pass to the function.
+            **kwds: Keyword arguments to pass to the function.
+
+        Returns:
+            The return value of the function.
+
+        """
+        pass

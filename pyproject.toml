@@ -20,6 +20,9 @@ autopep8 = "^2.0.2"
 types-redis = "^4.5.4.1"
 pytest-asyncio = "^0.21.0"
 
+[tool.poetry.plugins."redis_stream_examples"]
+example_service = "redis_stream.services.examplesrv:ExampleService"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

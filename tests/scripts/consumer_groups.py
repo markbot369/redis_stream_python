@@ -1,3 +1,7 @@
+"""
+Base script for preparing the Redis consumer groups and consumers for the 
+testings.
+"""
 import redis
 
 # Redis stream configuration
@@ -23,7 +27,10 @@ consumer_names = ['consumer1', 'consumer2', 'consumer3']
 for consumer_name in consumer_names:
     # Register consumer in each group
     for group_name in group_names:
-        redis_client.xgroup_createconsumer(stream_name, group_name, consumer_name)
+        redis_client.xgroup_createconsumer(
+            stream_name,
+            group_name,
+            consumer_name)
 
 # Consume messages
 while True:

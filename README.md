@@ -14,21 +14,24 @@ In this article, we'll explore how to use Python and the aioredis module to conn
 
 ## Redis Stream Client Example
 
-In this code, we define a Python class called RedisService that encapsulates the functionality for connecting to a Redis instance, reading from a stream, and writing to a queue. The constructor of this class takes four arguments, `stream_name` and `queue_name`, which define the Redis stream and queue to use, and `server` and `port` for define the redis server and corresponding IP port to connect.
-
-The following code shows the init method of the RedisService class:
+The following code defines a class called `RedisStreamReader`, which is responsible for consuming messages from a Redis stream using a consumer group:
 
 ```python
 import redis
 
 
-class RedisClient:
-    def __init__(self, host, port, password, stream_key):
-        self.host = host
-        self.port = port
-        self.password = password
+class RedisStreamReader:
+    def __init__(self, stream_key, group_name, consumer_name,
+                 server='localhost', port=6379):
+        self.redis_client = redis.Redis.from_url(f"redis://{server}:{port}")
         self.stream_key = stream_key
-        self.redis_client = redis.Redis(host=self.host, port=self.port, password=self.password)
+        self.group_name = group_name
+        self.consumer_name = consumer_name
+        # self.redis_client.xgroup_create(self.stream_key, self.group_name, mkstream=True)
+        self.consumer = self.redis_client.xreadgroup(
+            self.group_name,
+            self.consumer_name,
+            {self.stream_key: ">"})
 
     def publish_message(self, message):
         self.redis_client.xadd(self.stream_key, message)
@@ -46,24 +49,47 @@ class RedisClient:
 
 ```
 
-This Redis client class takes in the Redis host, port, and the stream key to connect to. The `publish_message` method takes a message as an argument and publishes it to the Redis stream. The `consume_messages` method takes the name of the consumer group, the name of the consumer, the last ID of the message read (default is the last message), and the count of messages to be consumed (default is 1).
+The `__init__` method initializes the `RedisStreamReader` instance with the `stream_key`, `group_name`, `consumer_name`, `server`, and `port` parameters. It creates a Redis client instance using the `redis.Redis.from_url()` method with the provided server and port. It also sets the `stream_key`, `group_name`, and `consumer_name` instance variables. The `xgroup_create()` method is commented out and not used, but it can be used to create a consumer group for the stream if it does not already exist. The `xreadgroup()` method is used to read messages from the stream using the consumer group, and the resulting messages are stored in the consumer instance variable.
 
-Here's an example of how to use the Redis client to publish and consume messages:
+The `is_connected()` method checks if the Redis client is connected by sending a ping request to the Redis server.
+
+The `read()` method is a generator that continuously reads messages from the stream using the consumer group. It loops indefinitely and checks for new messages in the consumer instance variable. If there are messages, it yields them using the yield from statement.
+
+The `ack()` method acknowledges a message by sending an acknowledgement (ACK) to the stream using the `xack()` method with the message ID, stream key, and consumer group name.
+
+The `nack()` method negatively acknowledges a message by sending a negative acknowledgement (NACK) to the stream using the `xack()` method with the message ID, stream key, consumer group name, and a False flag.
+
+To call the above code in a CLI application, you can create an instance of the `RedisStreamReader` class with the appropriate parameters(we provide some example), and then use its methods to read and acknowledge messages from the stream. For example:
 
 ```python
-from redis_stream_server.redis_service import RedisService
+import argparse
+from redis_stream.simple_redisclient import RedisStreamReader
 
-redis_client = RedisClient('localhost', 6379, None, 'mystream')
-# Publish a message to the stream
-redis_client.publish_message({'name': 'Alice', 'age': 30})
-# Consume messages from the stream
-consumer_group = 'myconsumer'
-consumer_name = 'consumer1'
-last_id = '0'
-count = 1
 
-messages = redis_client.consume_messages(consumer_group, consumer_name, last_id, count)
-print(messages)
+def parse_args():
+    parser = argparse.ArgumentParser()
+    parser.add_argument('stream_key', help='Redis stream key to read from')
+    parser.add_argument('group_name', help='Consumer group name')
+    parser.add_argument('consumer_name', help='Consumer name')
+    parser.add_argument('--server', default='localhost', help='Redis server host')
+    parser.add_argument('--port', default=6379, type=int, help='Redis server port')
+    return parser.parse_args()
+
+
+def main():
+    args = parse_args()
+    reader = RedisStreamReader(args.stream_key, args.group_name, args.consumer_name,
+                                server=args.server, port=args.port)
+    if reader.is_connected():
+        for message in reader.read():
+            # process the message
+            reader.ack(message['id'])
+    else:
+        print('Error: Redis client is not connected')
+
+
+if __name__ == '__main__':
+    main()
 ```
 
 ## Create some tests to see how this Redis service works

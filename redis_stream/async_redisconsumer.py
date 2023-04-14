@@ -13,6 +13,7 @@ class AsyncRedisStreamConsumer:
                  consumer_name,
                  server_config=None,
                  last_delivered_id='>',
+                 service=None,
                  count=1):
         """
         Initializes a AsyncRedisStreamConsumer object with the specified 
@@ -23,11 +24,12 @@ class AsyncRedisStreamConsumer:
         self._consumer_name = consumer_name
         self._last_delivered_id = last_delivered_id
         self._count = count
+        self._service = service
         self._server_config = server_config or {}
         # self._stream_name = redis_config.get(stream_name, 'mystream')
         # self._group_name = redis_config.get(group_name, 'group1')
         # self._consumer_name = redis_config.get(consumer_name, 'consumer1')
-        self._redis_db = None
+        self._redis = None
 
     async def connect_to_redis(self):
         """
@@ -38,10 +40,11 @@ class AsyncRedisStreamConsumer:
         self._redis = await aioredis.Redis.from_url(f"redis://{host}:{port}")
         log.info(f"Connected to Redis at {host}:{port}")
 
-    async def consume(self):
+    async def consume(self, callback=None):
         """
         Reads messages from the stream in a consumer group asynchronously.
         """
+        service = self._service or callback
         try:
             stream_data = await self._redis.xreadgroup(
                 groupname=self._group_name,
@@ -59,17 +62,31 @@ class AsyncRedisStreamConsumer:
         stream_id, messages = stream_data[0]
         self.last_delivered_id = stream_id
 
-        for message_id, message_data in messages:
-            # Process the message data
-            print(f"Message ID: {message_id}, Message Data: {message_data}")
+        if service:
+            for message_id, message_data in messages:
+                # Process the message data with a callable.
+                await service(message_id, message_data)
+                log.debug(f"Message ID: {message_id}, \
+                            Message Data: {message_data}")
 
-    async def start(self):
+    def ack(self, message_id):
+        self._redis.xack(self._stream_name,
+                         self._group_name,
+                         message_id)
+
+    def nack(self, message_id):
+        self._redis.xack(self._stream_name,
+                         self._group_name,
+                         message_id,
+                         False)
+
+    async def start(self, callback=None):
         """
         Starts the asynchronous stream consumer.
         """
         await self.connect_to_redis()
         while True:
-            await self.consume()
+            await self.consume(callback)
 
     async def stop(self):
         """
@@ -79,3 +96,8 @@ class AsyncRedisStreamConsumer:
             self._redis.close()
             # await self._redis_db.wait_closed()
         log.info('Closed Redis connection')
+
+    def describe(self):
+        return f'Stream: {self._stream_name} \
+                Group: {self._group_name} \
+                Consumer: {self._consumer_name}'
