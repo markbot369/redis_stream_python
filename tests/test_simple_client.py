@@ -16,7 +16,8 @@ def test_publish_message(redis_client):
 
     message = {'name': 'Bob', 'age': '25'}
     redis_client.publish_message(message)
-    result = redis_client.redis_client.xread({redis_client.stream_key: 0}, count=1)
+    result = redis_client.redis_client.xread({redis_client.stream_key: 0},
+                                             count=1)
     res_msg = {key.decode('utf-8'): value.decode('utf-8')
                for key, value in result[0][1][0][1].items()}
     assert res_msg == message
@@ -44,9 +45,9 @@ def test_consume_messages(redis_client):
         consumer_name,
         last_id=last_id,
         count=count)
-      
+
     res_message = {key.decode('utf-8'): value.decode('utf-8')
-                    for key, value in result[0][1][0][1].items()}
+                   for key, value in result[0][1][0][1].items()}
     assert len(result) == 1
     assert len(result[0][1]) == count
     assert res_message == messages[0]

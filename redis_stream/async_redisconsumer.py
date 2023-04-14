@@ -26,9 +26,6 @@ class AsyncRedisStreamConsumer:
         self._count = count
         self._service = service
         self._server_config = server_config or {}
-        # self._stream_name = redis_config.get(stream_name, 'mystream')
-        # self._group_name = redis_config.get(group_name, 'group1')
-        # self._consumer_name = redis_config.get(consumer_name, 'consumer1')
         self._redis = None
 
     async def connect_to_redis(self):
